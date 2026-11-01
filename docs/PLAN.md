@@ -164,7 +164,7 @@ upstream pull request with a test; the wrapper's terminal will meet them.
 | 5 | Control Audio Signal and Set Audio Volume are acknowledged and dropped, with nothing to override. The wrapper hears them from its own listener and passes them to the host | alarms |
 | 6 | Every Change Numeric Value repaints, changed or not (upstream #796) | drawing |
 | 7 | A long ETP stream during an upload is drained in one pass, starving other work (espVT: at most 32 per pass) | not seen on the bench |
-| 8 | The implement's ESC command (0x92) is not handled: an open field is not closed and no answer is sent. The wrapper answers it from its own listener (found here, 2026-10-24) | input |
+| 8 | The implement's ESC command (0x92) is not handled: an open field is not closed and no answer is sent (found here, 2026-10-24; fixed upstream: the server answers it and asks the terminal to close the field through `abort_input`, [#821](https://github.com/Open-Agriculture/AgIsoStack-plus-plus/pull/821), with a VT ESC sender in [#820](https://github.com/Open-Agriculture/AgIsoStack-plus-plus/pull/820), both merged 2026-10-29, in the pin since; the wrapper's own listener for it is gone) | input |
 | 9 | Sending a second multi-frame message to an implement while the last one is closing fails (one session per pair); the server's own sends do not retry. The wrapper queues the operator's messages (`Terminal::post`) (found here, 2026-10-24) | input |
 | 11 | The server takes every implement message addressed to any of the process's own control functions (the network manager's any-function callbacks), not only its own: with two terminals in one process each answers and takes on the other's implements, and neither screen comes up. The wrapper swaps upstream's listener for one that passes only messages to its own terminal or to everyone (`Terminal::listen`; the two-terminal self-test fails without it) (found here, 2026-10-25) | several terminals |
 | 12 | Identify VT is handled only from a connected implement (in the connection-dependent messages), and `identify_vt` only logs; an implement asks while the operator is choosing a terminal, before it connects, and gets a NACK. The wrapper answers it for every implement from its own listener and passes `identify` to the host (found here, 2026-10-25) | several terminals |
@@ -198,8 +198,9 @@ fixed in [#808](https://github.com/Open-Agriculture/AgIsoStack-plus-plus/pull/80
 `transport-transmit-race`): the first frame is checked again and sent under the sessions lock, so
 the immediate send stays and one thread sends it; ETP gets TP's lock on its session list. Two
 threaded unit tests fail without it (at least one in each of 5 runs) and pass with it; `tp_race`
-on vcan: none in 4,000, at the same speed. AgOpenWeb-HAT carries it as a patch from 0.2.27; the
-bench's example implements are built without it and can still double an RTS.
+on vcan: none in 4,000, at the same speed. Merged 2026-10-30 (ee6eba1), in the pin since, so the
+bench's example implements (built at the pin) have it once rebuilt. AgOpenWeb-HAT carries it as a
+patch from 0.2.27.
 
 Two more espVT found are not ours: the single-producer transmit queue (PR #793; the wrapper does
 not use that queue) and the unlocked working-set list (the wrapper runs the server on one

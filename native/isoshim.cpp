@@ -124,7 +124,7 @@ public:
 	// to any of the process's own control functions, so with two terminals each would also answer
 	// the other's implements (and take them on): it hears only its own, and those sent to everyone
 	// (gap 11). Then a second listener for the ones upstream acknowledges and drops (audio, gap 5)
-	// or does not handle (ESC, gap 8; Identify VT from an implement not connected, gap 12).
+	// or does not handle (Identify VT from an implement not connected, gap 12).
 	void listen() {
 		const auto pgn = static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::ECUtoVirtualTerminal);
 		isobus::CANNetworkManager::CANNetwork.remove_any_control_function_parameter_group_number_callback(pgn, process_rx_message, this);
@@ -390,13 +390,7 @@ public:
 		if (openId_ == isobus::NULL_OBJECT_ID || !openWs_) return false;
 		const auto ws = openWs_;
 		const std::uint16_t id = openId_;
-		post([=] {
-			const std::uint8_t data[8] = { static_cast<std::uint8_t>(Function::VTESCMessage), static_cast<std::uint8_t>(id & 0xFF),
-				                           static_cast<std::uint8_t>(id >> 8), 0, 0xFF, 0xFF, 0xFF, 0xFF };
-			return isobus::CANNetworkManager::CANNetwork.send_can_message(
-			  static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::VirtualTerminalToECU), data, sizeof data,
-			  serverInternalControlFunction, ws->get_control_function(), get_priority());
-		});
+		post([=] { return send_esc_message(id, 0, ws->get_control_function()); });
 		setOpen(ws, isobus::NULL_OBJECT_ID);
 		runMacros(ws, find(ws, id), isobus::EventID::OnESC);
 		dirty_ = true;
@@ -491,30 +485,21 @@ private:
 				json.key("percent").value(static_cast<int>(data[1])).end_object();
 				self->message(json.str());
 				break;
-			case static_cast<std::uint8_t>(Function::ESCCommand): self->escCommand(ws); break;
 			default: break;
 		}
 	}
 
-	// The implement's ESC command: its open field closes (no VT ESC message: the implement asked),
-	// and the answer names the field, or says none was open.
-	void escCommand(const std::shared_ptr<WorkingSet> &ws) {
-		std::uint16_t id = isobus::NULL_OBJECT_ID;
-		std::uint8_t error = 1; // no input field is open
-		if (openWs_ == ws && openId_ != isobus::NULL_OBJECT_ID) {
-			id = openId_;
-			error = 0;
-			setOpen(ws, isobus::NULL_OBJECT_ID);
-			runMacros(ws, find(ws, id), isobus::EventID::OnESC);
-			dirty_ = true;
-		}
-		post([=] {
-			const std::uint8_t data[8] = { static_cast<std::uint8_t>(Function::ESCCommand), static_cast<std::uint8_t>(id & 0xFF),
-				                           static_cast<std::uint8_t>(id >> 8), error, 0xFF, 0xFF, 0xFF, 0xFF };
-			return isobus::CANNetworkManager::CANNetwork.send_can_message(
-			  static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::VirtualTerminalToECU), data, sizeof data,
-			  serverInternalControlFunction, ws->get_control_function(), get_priority());
-		});
+	// The implement's ESC command (upstream answers it, naming the field or saying none was open):
+	// its open field closes and stays selected, as when a value is entered. No VT ESC message: the
+	// implement asked.
+	std::uint16_t abort_input(std::shared_ptr<WorkingSet> ws) override {
+		if (openWs_ != ws || openId_ == isobus::NULL_OBJECT_ID) return isobus::NULL_OBJECT_ID;
+		const std::uint16_t id = openId_;
+		setOpen(ws, isobus::NULL_OBJECT_ID);
+		runMacros(ws, find(ws, id), isobus::EventID::OnESC);
+		post([=] { return send_select_input_object_message(id, true, false, ws->get_control_function()); });
+		dirty_ = true;
+		return id;
 	}
 
 	// The operator's messages to an implement, in order. One the stack cannot take now (a
