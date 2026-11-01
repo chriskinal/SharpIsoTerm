@@ -207,7 +207,9 @@ public static unsafe class IsoShimSpike
 
         double tServer = -1, tClient = -1, tPool = -1, tMask = -1, tAlarm = -1;
         bool pressed = false;
-        while (clock.Elapsed.TotalSeconds < 60)
+        // 120 s: the 16 frames per clear-to-send run takes about 37 s on CI's macOS runner (a
+        // few seconds on the tablets) and ran out of 60 s on slower days, 41 bytes short.
+        while (clock.Elapsed.TotalSeconds < 120)
         {
             isoshim_step();
             double now = clock.Elapsed.TotalMilliseconds;
@@ -244,7 +246,7 @@ public static unsafe class IsoShimSpike
         bool stored = fromStore ? loads > 0 && bytesFrom1 < 20000 : saves > 0;
         bool pass = tAlarm >= 0 && !callbackOffThread && drewData && drewAlarm && stored;
         log(pass ? $"PASS in {tAlarm:F0} ms" :
-            tAlarm < 0 ? "FAIL: no alarm mask within 60 s" :
+            tAlarm < 0 ? "FAIL: no alarm mask within 120 s" :
             callbackOffThread ? "FAIL: a callback came on another thread" :
             !stored ? (fromStore ? "FAIL: the pool was not loaded from the store" : "FAIL: the pool was not stored") :
             "FAIL: a mask was not drawn");
