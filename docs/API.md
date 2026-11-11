@@ -319,7 +319,7 @@ known. Sent when the list, a state, the shown implement, or the progress in whol
 
 `alarms` lists every implement whose active mask is an alarm mask, shown or not, whenever that
 changes. The terminal doesn't switch implements for an alarm. `audio`: Hz and ms; `activations` 0
-stops a sounding signal.
+stops a sounding signal. `volume`: 0 to 100 (a larger value from the implement comes as 100).
 
 ### `identify`
 

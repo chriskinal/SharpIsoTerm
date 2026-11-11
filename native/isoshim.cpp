@@ -123,8 +123,8 @@ public:
 	// After the base class's own initialize. Upstream's server takes every implement message sent
 	// to any of the process's own control functions, so with two terminals each would also answer
 	// the other's implements (and take them on): it hears only its own, and those sent to everyone
-	// (gap 11). Then a second listener for the ones upstream acknowledges and drops (audio, gap 5)
-	// or does not handle (Identify VT from an implement not connected, gap 12).
+	// (gap 11). Then a second listener for the one upstream does not handle (Identify VT from an
+	// implement not connected, gap 12).
 	void listen() {
 		const auto pgn = static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::ECUtoVirtualTerminal);
 		isobus::CANNetworkManager::CANNetwork.remove_any_control_function_parameter_group_number_callback(pgn, process_rx_message, this);
@@ -464,29 +464,35 @@ private:
 		// the implement's own settings). Upstream takes it only from a connected implement.
 		if (data[0] == static_cast<std::uint8_t>(Function::IdentifyVTMessage) && (to == nullptr || to == self->serverInternalControlFunction)) {
 			self->message("{\"type\":\"identify\"}");
-			return;
 		}
-		if (to != self->serverInternalControlFunction) return;
-		std::shared_ptr<WorkingSet> ws;
-		for (const auto &candidate : self->managedWorkingSetList)
-			if (candidate->get_control_function() == m.get_source_control_function()) ws = candidate;
+	}
+
+	// Control Audio Signal and Set Audio Volume, passed to the host (upstream answers them).
+	std::shared_ptr<WorkingSet> workingSetOf(const std::shared_ptr<isobus::ControlFunction> &cf) const {
+		for (const auto &ws : managedWorkingSetList)
+			if (ws->get_control_function() == cf) return ws;
+		return nullptr;
+	}
+
+	void control_audio_signal(std::uint8_t activations, std::uint16_t frequency, std::uint16_t on, std::uint16_t off,
+	                          std::shared_ptr<isobus::ControlFunction> source) override {
+		const auto ws = workingSetOf(source);
+		if (!ws) return;
+		// activations 0 stops a signal that is sounding
+		isoshim::Json json;
+		json.begin_object().key("type").value("audio").key("ws").value(isoshim::hexName(nameOf(ws)));
+		json.key("activations").value(static_cast<int>(activations)).key("frequency").value(static_cast<int>(frequency));
+		json.key("on").value(static_cast<int>(on)).key("off").value(static_cast<int>(off)).end_object();
+		message(json.str());
+	}
+
+	void set_audio_volume(std::uint8_t percent, std::shared_ptr<isobus::ControlFunction> source) override {
+		const auto ws = workingSetOf(source);
 		if (!ws) return;
 		isoshim::Json json;
-		switch (data[0]) {
-			case static_cast<std::uint8_t>(Function::ControlAudioSignalCommand):
-				// activations 0 stops a signal that is sounding
-				json.begin_object().key("type").value("audio").key("ws").value(isoshim::hexName(nameOf(ws)));
-				json.key("activations").value(static_cast<int>(data[1])).key("frequency").value(static_cast<int>(m.get_uint16_at(2)));
-				json.key("on").value(static_cast<int>(m.get_uint16_at(4))).key("off").value(static_cast<int>(m.get_uint16_at(6))).end_object();
-				self->message(json.str());
-				break;
-			case static_cast<std::uint8_t>(Function::SetAudioVolumeCommand):
-				json.begin_object().key("type").value("volume").key("ws").value(isoshim::hexName(nameOf(ws)));
-				json.key("percent").value(static_cast<int>(data[1])).end_object();
-				self->message(json.str());
-				break;
-			default: break;
-		}
+		json.begin_object().key("type").value("volume").key("ws").value(isoshim::hexName(nameOf(ws)));
+		json.key("percent").value(static_cast<int>(percent)).end_object();
+		message(json.str());
 	}
 
 	// The implement's ESC command (upstream answers it, naming the field or saying none was open):
@@ -556,11 +562,8 @@ private:
 		return out;
 	}
 
-	// get_object_by_id would add an empty entry for a missing id (upstream's operator[]).
 	static std::shared_ptr<isobus::VTObject> find(const std::shared_ptr<WorkingSet> &ws, std::uint16_t id) {
-		const auto &tree = ws->get_object_tree();
-		const auto it = tree.find(id);
-		return it == tree.end() ? nullptr : it->second;
+		return ws->get_object_by_id(id);
 	}
 
 	void runMacros(const std::shared_ptr<WorkingSet> &ws, const std::shared_ptr<isobus::VTObject> &object, isobus::EventID event) {
