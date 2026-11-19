@@ -159,7 +159,7 @@ upstream pull request with a test; the wrapper's terminal will meet them.
 |---|---|---|
 | 1 | After the terminal restarts, an implement carries on with maintenance messages without the init bit, and the server never takes it on (espVT: accept it, load its stored pool if there is one version) | stored pools |
 | 2 | Status messages start at once after a restart, so an implement never sees the terminal go away (espVT: no status for the first 5 s) | stored pools |
-| 3 | Changing the active mask does not run the pool's On Show and On Hide macros | drawing |
+| 3 | Changing the active mask does not run the pool's On Show and On Hide macros (fixed upstream: Change Active Mask and Change Soft Key Mask run On Hide, On Show and the On Change macros, [#932](https://github.com/Open-Agriculture/AgIsoStack-plus-plus/pull/932), merged 2026-11-14, in the pin since) | drawing |
 | 4 | `get_object_by_id` uses `operator[]`, so looking up a missing id adds an empty entry (fixed upstream: [#837](https://github.com/Open-Agriculture/AgIsoStack-plus-plus/pull/837), merged 2026-11-01, in the pin since; the wrapper's own lookup is gone) | drawing |
 | 5 | Control Audio Signal and Set Audio Volume are acknowledged and dropped, with nothing to override (fixed upstream: the server calls `control_audio_signal` and `set_audio_volume`, the volume limited to 100 %, [#838](https://github.com/Open-Agriculture/AgIsoStack-plus-plus/pull/838), merged 2026-11-03, in the pin since; the wrapper overrides them and its own listener for them is gone) | alarms |
 | 6 | Every Change Numeric Value repaints, changed or not (upstream #796) | drawing |

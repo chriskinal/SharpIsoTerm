@@ -127,7 +127,7 @@ public:
 	// implement not connected, gap 12).
 	void listen() {
 		const auto pgn = static_cast<std::uint32_t>(isobus::CANLibParameterGroupNumber::ECUtoVirtualTerminal);
-		isobus::CANNetworkManager::CANNetwork.remove_any_control_function_parameter_group_number_callback(pgn, process_rx_message, this);
+		isobus::CANNetworkManager::CANNetwork.remove_any_control_function_parameter_group_number_callback(pgn, store_rx_message, this);
 		isobus::CANNetworkManager::CANNetwork.add_any_control_function_parameter_group_number_callback(pgn, onAddressed, this);
 		isobus::CANNetworkManager::CANNetwork.add_any_control_function_parameter_group_number_callback(pgn, onImplementMessage, this);
 	}
@@ -430,7 +430,7 @@ private:
 		const auto to = m.get_destination_control_function();
 		if (to != nullptr && to != self->serverInternalControlFunction) return;
 		if (m.get_data_length() > 0 && m.get_uint8_at(0) == static_cast<std::uint8_t>(Function::IdentifyVTMessage)) return; // ours
-		process_rx_message(m, self);
+		store_rx_message(m, self); // into upstream's queue, which update() works through
 	}
 
 	// Every implement showing an alarm mask, shown or not: {"type":"alarms","list":[{ws, address,
@@ -495,15 +495,16 @@ private:
 		message(json.str());
 	}
 
-	// The implement's ESC command (upstream answers it, naming the field or saying none was open):
-	// its open field closes and stays selected, as when a value is entered. No VT ESC message: the
-	// implement asked.
+	// The implement's ESC command, or upstream finding the open field removed, hidden or replaced
+	// (upstream answers the command, naming the field or saying none was open, and sends the VT ESC
+	// message when the field went): the field closes and is deselected. No VT ESC message from here.
 	std::uint16_t abort_input(std::shared_ptr<WorkingSet> ws) override {
 		if (openWs_ != ws || openId_ == isobus::NULL_OBJECT_ID) return isobus::NULL_OBJECT_ID;
 		const std::uint16_t id = openId_;
 		setOpen(ws, isobus::NULL_OBJECT_ID);
+		ws->set_object_focus(isobus::NULL_OBJECT_ID);
 		runMacros(ws, find(ws, id), isobus::EventID::OnESC);
-		post([=] { return send_select_input_object_message(id, true, false, ws->get_control_function()); });
+		post([=] { return send_select_input_object_message(id, false, false, ws->get_control_function()); });
 		dirty_ = true;
 		return id;
 	}
@@ -536,10 +537,13 @@ private:
 		dirty_ = true;
 	}
 
-	// Which field is open for input; the host is told with an edit message (o null: closed).
+	// Which field is open for input; the host is told with an edit message (o null: closed), and
+	// upstream, which refuses changes to it and closes it when it goes.
 	void setOpen(const std::shared_ptr<WorkingSet> &ws, std::uint16_t id) {
 		if (id == openId_ && ws == openWs_) return;
 		const bool wasOpen = openId_ != isobus::NULL_OBJECT_ID;
+		if (openWs_ && openWs_ != ws) openWs_->set_object_open_for_input(isobus::NULL_OBJECT_ID);
+		if (ws) ws->set_object_open_for_input(id);
 		openId_ = id;
 		openWs_ = id == isobus::NULL_OBJECT_ID ? nullptr : ws;
 		if (id != isobus::NULL_OBJECT_ID || wasOpen)
@@ -776,6 +780,7 @@ int32_t isoshim_vt_start(const isoshim_vt_config *configs, int32_t count, const 
 	auto &network = isobus::CANNetworkManager::CANNetwork.get_configuration();
 	network.set_number_of_packets_per_cts_message(config[0].packets_per_cts);
 	network.set_number_of_packets_per_dpo_message(config[0].packets_per_cts);
+	network.set_number_of_packets_per_etp_cts_message(config[0].packets_per_cts);
 	if (std::getenv("ISOSHIM_LOG")) {
 		isobus::CANStackLogger::set_can_stack_logger_sink(&g_logger);
 		isobus::CANStackLogger::set_log_level(isobus::CANStackLogger::LoggingLevel::Info);

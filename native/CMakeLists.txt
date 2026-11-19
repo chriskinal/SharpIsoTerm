@@ -14,7 +14,7 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 # AgIsoStack++ at a pinned upstream commit, fetched at configure time. The pin follows upstream
 # HEAD: move it, then run the self-test on every platform (README.md). ISOSHIM_STACK_DIR builds
 # against a local checkout instead. Not a cache variable, so a build directory follows the pin.
-set(AGISOSTACK_GIT_TAG "4b920796eed04852434be2f7de145038c156bb7c")  # upstream HEAD of 2026-11-11, with #837, #838 and #842
+set(AGISOSTACK_GIT_TAG "d29e670580ddd4271fdda55e59e02d79513e5af7")  # upstream HEAD of 2026-11-18, with #932, #946 and #952
 set(ISOSHIM_STACK_DIR "" CACHE PATH "Local AgIsoStack++ source tree to use instead of the pin")
 
 set(BUILD_EXAMPLES OFF)
